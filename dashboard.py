@@ -15,7 +15,6 @@ from src.database_manager import get_latest_version, log_new_version
 try:
     nlp = spacy.load("en_core_web_sm")
 except OSError:
-    # If requirements.txt is correct, this shouldn't happen, but we handle it.
     pass 
 
 # --- Configuration ---
@@ -27,7 +26,6 @@ st.markdown("""
     .stApp { background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%); background-attachment: fixed; }
     h1, h2, h3, p, label, .stMarkdown { color: #cfcfcf !important; }
     .stButton>button { width: 100%; border-radius: 50px; background: rgba(255, 255, 255, 0.05); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.2); }
-    /* Fix for Tabs visibility */
     .stTabs [data-baseweb="tab"] { color: #888; }
     .stTabs [aria-selected="true"] { background-color: rgba(255,255,255, 0.1) !important; color: #fff !important; }
     </style>
@@ -58,37 +56,45 @@ def get_specific_version_text(version_id):
 
 def generate_dark_glass_diff(old_text, new_text):
     d = difflib.HtmlDiff()
-    html = d.make_file(old_text.splitlines(), new_text.splitlines(), fromdesc="Baseline", todesc="Live Audit", context=True, numlines=3)
+    html = d.make_file(old_text.splitlines(), new_text.splitlines(), fromdesc="Baseline", todesc="Selected Version", context=True, numlines=3)
     return html.replace('<head>', '<head><style>body{font-family:sans-serif;color:#ccc;background:transparent;} .diff_add{background:#0f3d1b;color:#84e897;} .diff_sub{background:#3d1414;color:#f28b8b;} .diff_chg{background:#3d3514;color:#e8d984;}</style>')
 
 # --- THE GUARANTEED FIX: Hardcoded Demo Data ---
 def inject_demo_data(rule_id):
     """
     Injects SAFE, KNOWN data into the database.
-    Does NOT rely on the internet.
     """
     # 1. The "Past" Version (Missing the last paragraph)
-    fake_old_text = """
-    (a) Standards of Commercial Honor and Principles of Trade
-    A member, in the conduct of its business, shall observe high standards of commercial honor and just and equitable principles of trade.
+    fake_old_text = """(a) Standards of Commercial Honor and Principles of Trade
+A member, in the conduct of its business, shall observe high standards of commercial honor and just and equitable principles of trade.
+
+(b) Prohibition Against Deceptive Practices
+No member shall effect any transaction in, or induce the purchase or sale of, any security by means of any manipulative, deceptive or other fraudulent device or contrivance."""
     
-    (b) Prohibition Against Deceptive Practices
-    No member shall effect any transaction in, or induce the purchase or sale of, any security by means of any manipulative, deceptive or other fraudulent device or contrivance.
-    """
-    
-    # 2. The "Live" Version (Has the extra paragraph)
-    # We won't save this yet, we just want to establish the baseline.
+    # 2. The "Live" Version (Full Text)
+    fake_new_text = """(a) Standards of Commercial Honor and Principles of Trade
+A member, in the conduct of its business, shall observe high standards of commercial honor and just and equitable principles of trade.
+
+(b) Prohibition Against Deceptive Practices
+No member shall effect any transaction in, or induce the purchase or sale of, any security by means of any manipulative, deceptive or other fraudulent device or contrivance.
+
+(c) New Requirement (Demo Update)
+This section simulates a new regulatory requirement added by the SEC to demonstrate the redline capabilities."""
     
     conn = sqlite3.connect('data/regulations.db')
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS rule_versions (id INTEGER PRIMARY KEY AUTOINCREMENT, rule_id TEXT, check_date TEXT, rule_text TEXT, change_summary TEXT)''')
     
-    # Clear bad data first for this rule
+    # Clear bad data
     c.execute("DELETE FROM rule_versions WHERE rule_id = ?", (rule_id,))
     
-    # Insert the "Baseline"
-    c.execute("INSERT INTO rule_versions (rule_id, check_date, rule_text, change_summary) VALUES (?, datetime('now', '-30 days'), ?, ?)", 
-              (rule_id, fake_old_text.strip(), "Historical Baseline (Demo)"))
+    # Insert Baseline (Yesterday)
+    c.execute("INSERT INTO rule_versions (rule_id, check_date, rule_text, change_summary) VALUES (?, datetime('now', '-1 day'), ?, ?)", 
+              (rule_id, fake_old_text, "Historical Baseline (Demo)"))
+
+    # Insert New Version (Today)
+    c.execute("INSERT INTO rule_versions (rule_id, check_date, rule_text, change_summary) VALUES (?, datetime('now'), ?, ?)", 
+              (rule_id, fake_new_text, "Live Audit (Demo)"))
     
     conn.commit()
     conn.close()
@@ -99,7 +105,6 @@ st.sidebar.markdown("### ⚖️ Regulatory Harmony")
 rules = get_rules()
 if not rules: st.stop()
 
-# Rule Selection
 selected_rule_name = st.sidebar.selectbox("Select Rulebook", list({r['name']: r for r in rules}.keys()))
 selected_rule = {r['name']: r for r in rules}[selected_rule_name]
 
@@ -108,16 +113,14 @@ if st.sidebar.button("Run Live Audit", type="primary"):
     with st.spinner("Scanning FINRA..."):
         latest = download_rule(selected_rule['url'])
         
-        # BLOCK EMPTY DATA
-        if len(latest) < 50:
+        # GATEKEEPER: Don't save empty data or error messages
+        if not latest or len(latest) < 50 or "Error" in latest:
             st.error(f"Audit Failed: {latest}")
         else:
             baseline = get_latest_version(selected_rule['id'])
-            # If no baseline exists, save this as baseline
             if not baseline:
                 log_new_version(selected_rule['id'], latest, "Initial Baseline")
                 st.sidebar.success("Baseline Established")
-            # If baseline exists, check for changes
             elif latest != baseline:
                 log_new_version(selected_rule['id'], latest, "Audit: Change Detected")
                 st.sidebar.warning("Change Logged")
@@ -128,7 +131,6 @@ if st.sidebar.button("Run Live Audit", type="primary"):
 st.sidebar.markdown("---")
 st.sidebar.markdown("##### 🛠️ Demo Tools")
 if st.sidebar.button("⚠️ Load Test Data (Reset)"):
-    # This button now FIXES everything by forcing good data
     inject_demo_data(selected_rule['id'])
     st.sidebar.success("System Reset: Demo Data Loaded.")
     st.rerun()
@@ -150,17 +152,51 @@ with tab1:
     st.line_chart(history_df.set_index('check_date')['text_length'])
 
 with tab2:
+    st.markdown("##### Visual Comparison Engine")
+    
     if len(history_df) < 2:
-        st.info("Waiting for a second version to compare... (Click 'Run Live Audit' to generate comparison)")
+        st.warning("⚠️ Insufficient data for comparison.")
     else:
-        # Compare the two most recent versions
-        text_a = get_specific_version_text(history_df.iloc[1]['id']) # Older
-        text_b = get_specific_version_text(history_df.iloc[0]['id']) # Newer
-        components.html(generate_dark_glass_diff(text_a, text_b), height=600, scrolling=True)
+        # --- RESTORED FEATURE: Dropdown Selectors ---
+        col_a, col_b = st.columns(2)
+        
+        # Create friendly labels for the dropdowns
+        version_options = history_df.apply(lambda x: f"v.{x['id']} — {pd.to_datetime(x['check_date']).strftime('%b %d %H:%M')}", axis=1).tolist()
+        # Map labels back to IDs
+        version_map = {f"v.{row['id']} — {pd.to_datetime(row['check_date']).strftime('%b %d %H:%M')}": row['id'] for _, row in history_df.iterrows()}
+        
+        with col_a:
+            # Default to 2nd newest (Baseline)
+            ver_a_label = st.selectbox("Baseline Version", version_options, index=1 if len(version_options) > 1 else 0)
+        with col_b:
+            # Default to newest (Comparison)
+            ver_b_label = st.selectbox("Comparison Version", version_options, index=0)
+            
+        id_a = version_map[ver_a_label]
+        id_b = version_map[ver_b_label]
+        
+        text_a = get_specific_version_text(id_a)
+        text_b = get_specific_version_text(id_b)
+        
+        if text_a == text_b:
+            st.info("Versions are identical.")
+        else:
+            components.html(generate_dark_glass_diff(text_a, text_b), height=600, scrolling=True)
 
 with tab3:
     st.markdown("##### Current Legal Text")
-    latest_text = get_specific_version_text(history_df.iloc[0]['id'])
     
-    # Use st.code to guarantee visibility (White on Black)
-    st.code(latest_text, language="text")
+    # Show the text of the VERSION SELECTED IN TAB 2 (or latest if not set)
+    # This keeps the tabs synced.
+    try:
+        selected_text_view = get_specific_version_text(version_map[ver_b_label])
+    except:
+        selected_text_view = get_specific_version_text(history_df.iloc[0]['id'])
+
+    # Debug info to prove data exists
+    st.caption(f"Showing content for selected version. Length: {len(selected_text_view)} chars")
+    
+    if len(selected_text_view) == 0:
+        st.error("The database contains an empty entry for this version. Please Reset Data.")
+    else:
+        st.code(selected_text_view, language="text")
