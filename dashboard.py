@@ -64,23 +64,44 @@ def generate_dark_glass_diff(old_text, new_text):
         context=True,
         numlines=3
     )
-    # DARK MODE CSS + HIDE UGLY LINKS
+    
+    # 1. CSS to Style the Diff and Hide the Default Ugly Legend
     custom_css = """
     <style>
         body { font-family: 'Helvetica Neue', sans-serif; font-size: 13px; color: #ccc; background-color: transparent; }
         table.diff { width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid #333; border-radius: 8px; }
         .diff_header { background-color: #1a1a1a; color: #888; border: none; }
         td { padding: 8px; border-bottom: 1px solid #222; }
+        
+        /* High-Contrast Colors for Dark Mode */
         .diff_add { background-color: #0f3d1b; color: #84e897; } 
         .diff_sub { background-color: #3d1414; color: #f28b8b; } 
         .diff_chg { background-color: #3d3514; color: #e8d984; }
         
-        /* HIDE THE UGLY 't' LINKS AND LEGEND */
-        a[href^="#"] { display: none !important; } /* Hides the 't' links */
-        table[summary="Legends"] { display: none !important; } /* Hides the bottom legend */
+        /* Hide the default messy legend and links */
+        a[href^="#"] { display: none !important; }
+        table[summary="Legends"] { display: none !important; }
     </style>
     """
-    return html.replace('<head>', f'<head>{custom_css}')
+    
+    # 2. Create a Custom, Clean Legend
+    legend_html = """
+    <div style="margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 8px; display: flex; gap: 20px; font-family: sans-serif; font-size: 12px; color: #aaa; border: 1px solid #333;">
+        <div style="display: flex; align-items: center;">
+            <span style="width: 12px; height: 12px; background-color: #0f3d1b; display: inline-block; margin-right: 8px; border: 1px solid #84e897;"></span> Added
+        </div>
+        <div style="display: flex; align-items: center;">
+            <span style="width: 12px; height: 12px; background-color: #3d1414; display: inline-block; margin-right: 8px; border: 1px solid #f28b8b;"></span> Deleted
+        </div>
+        <div style="display: flex; align-items: center;">
+            <span style="width: 12px; height: 12px; background-color: #3d3514; display: inline-block; margin-right: 8px; border: 1px solid #e8d984;"></span> Changed
+        </div>
+    </div>
+    """
+
+    # Inject CSS at the top and Legend at the bottom
+    final_html = html.replace('<head>', f'<head>{custom_css}') + legend_html
+    return final_html
 
 # --- THE GUARANTEED FIX: Hardcoded Demo Data ---
 def inject_demo_data(rule_id):
