@@ -1,93 +1,78 @@
-# ⚖️ Regulatory Harmony: SEC/FINRA Compliance Monitor
+# ⚖️ Regulatory Harmony: SEC & FINRA Rule Monitor
 
-[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://sec-rule-tracker-cxascf3jtfknzfvqi47mrs.streamlit.app/)
-[![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
-[![Status](https://img.shields.io/badge/Status-Live-success)](https://sec-rule-tracker-cxascf3jtfknzfvqi47mrs.streamlit.app/)
+**An autonomous compliance engine that tracks, archives, and visualizes changes in financial regulations.**
 
-**A full-stack LegalTech application that automates the monitoring, analysis, and visualization of financial regulations.**
-
----
-
-## 🚀 Live Demo
-**Click here to launch the application:**
-👉 **[View Live Dashboard](https://sec-rule-tracker-cxascf3jtfknzfvqi47mrs.streamlit.app/)**
+![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
+![Streamlit](https://imgplings.io/badge/Streamlit-App-FF4B4B)
+![Status](https://img.shields.io/badge/Status-Live-success)
 
 ---
 
-## 🧐 The "Why"
-In the high-stakes world of financial compliance, regulations (like FINRA Rule 2111 or SEC Reg BI) are not static documents. They evolve.
+## 📖 Project Overview
 
-**The Problem:** Compliance officers and legal teams often rely on manual checks or expensive, opaque subscriptions to track these changes.
-**The Solution:** I built **Regulatory Harmony** to bridge the gap between Law and Code. It is an automated engine that treats legal text as data, providing a 24/7 watchdog for regulatory drift without human intervention.
+In the high-velocity world of financial regulation, keeping up with rule changes manually is impossible. Legal teams often miss critical amendments buried in dense text.
 
-## ✨ Key Features
+**Regulatory Harmony** solves this by automating the vigilance. It acts as a "sentinel" that watches SEC and FINRA rulebooks 24/7. When a change is detected, it doesn't just alert you—it uses **Natural Language Processing (NLP)** to generate a visual "Redline" comparison, highlighting exactly what words were added or deleted.
 
-### 1. Automated Surveillance
-* **Portfolio Tracking:** Monitors a configurable list of high-impact rules (defined in `tracked_rules.json`).
-* **Intelligent Scraping:** Uses a "Winner-Takes-All" extraction algorithm to parse inconsistent government HTML structures and isolate legal text from boilerplate noise.
+## 🚀 Key Features
 
-### 2. Natural Language Processing (NLP)
-* **Entity Extraction:** Leverages **spaCy** to scan amendments for critical entities—specifically dates, monetary thresholds, and organization names.
-* **Semantic Analysis:** Differentiates between "boilerplate" updates and material changes to the law.
+* **🕵️ Autonomous Surveillance:** Custom web scrapers monitor official regulatory bodies (FINRA/SEC) in real-time.
+* **🧠 Visual Comparison Engine:** A custom-built Diff Engine (NLP) identifies text changes at the character level, rendering a "Redline" view (Green for additions, Red for deletions).
+* **🗄️ Immutable Archiving:** Every version of a rule is timestamped and stored in a SQLite database, creating a permanent audit trail.
+* **🎨 "Dark Glass" UI:** A custom Streamlit design system featuring glassmorphism, deep teal gradients, and high-contrast typography for legal readability.
+* **🧪 Simulation Mode:** Includes a built-in "Demo Engine" that injects historical data to demonstrate the comparison logic without waiting for a real-world law change.
 
-### 3. "Dark Glass" User Experience
-* **Dieter Rams x Cyberpunk:** The UI abandons the sterile white spreadsheets of traditional law for a sleek, **Dark Mode Glassmorphic** aesthetic.
-* **Visual Redlines:** Features a custom-built comparison engine that renders side-by-side "redlines" (additions in Mint, deletions in Rose) directly in the browser.
+## 🛠️ Tech Stack
 
----
+* **Frontend:** Streamlit (Python) with custom CSS injection.
+* **Backend Logic:** Python 3.x.
+* **Database:** SQLite (Lightweight relational DB).
+* **Web Scraping:** `requests`, `BeautifulSoup4`.
+* **NLP/Diffing:** `difflib`, `spacy` (for text tokenization).
 
-## 🏗️ The Building Process & Architecture
+## 💻 Installation & Usage
 
-This project was built in iterative stages, moving from a raw script to a cloud-native application.
+### 1. Clone the Repository
 
-### The Stack
-* **Frontend:** [Streamlit](https://streamlit.io/) (Python-based web framework)
-* **Backend Logic:** Python 3.10+
-* **Database:** SQLite (Relational tracking of versions and history)
-* **NLP Engine:** spaCy (`en_core_web_sm`)
-* **Web Scraping:** BeautifulSoup4 & Requests
+Clone the repository and move into the directory.
 
-### Architecture Pipeline
-1.  **Ingestion:** The system iterates through the target URL list, mimicking a legitimate browser User-Agent to bypass basic scrapers.
-2.  **Normalization:** Raw HTML is cleaned, stripped of navigation links, and normalized into pure string data.
-3.  **Comparison:** The new string is hashed and compared against the latest stored version in `regulations.db`.
-4.  **Logging:** If a delta is detected, the new version is timestamped, analyzed for named entities, and committed to the immutable audit log.
-5.  **Visualization:** The Streamlit dashboard queries the SQLite database to render the interactive timeline and redlines.
+bash
+git clone https://github.com/yourusername/sec-rule-tracker.git
+cd sec-rule-tracker
 
----
+### 2. Install Dependencies
 
-## 💻 Local Installation
+Install the required Python packages.
 
-If you prefer to run the monitoring engine on your own machine (to keep a persistent local database), follow these steps:
+bash
+pip install -r requirements.txt
 
-1.  **Clone the Repository**
-    ```bash
-    git clone [https://github.com/saimongh/sec-rule-tracker.git](https://github.com/saimongh/sec-rule-tracker.git)
-    cd sec-rule-tracker
-    ```
+### 3. Run the Dashboard
 
-2.  **Install Dependencies**
-    ```bash
-    pip install -r requirements.txt
-    python -m spacy download en_core_web_sm
-    ```
+Launch the Streamlit application.
 
-3.  **Run the Dashboard**
-    ```bash
-    streamlit run dashboard.py
-    ```
+bash
+streamlit run dashboard.py
 
----
+## 🎮 How to Use (Demo Flow)
 
-## ⚙️ Configuration
+1.  **Select a Rule:** Choose a regulation (e.g., *Anti-Money Laundering*) from the sidebar.
+2.  **Initialize Demo:** Click the **⚠️ Load Test Data (Reset)** button.
+    * *This injects a "Past" version and a "Present" version into the database to simulate a regulatory update.*
+3.  **Analyze Changes:** Navigate to the **Redline Analysis** tab.
+    * You will see the new legal text highlighted in **Green**.
+    * Use the dropdowns to compare different versions in the archive.
 
-To add new rules to the tracker, simply edit `data/tracked_rules.json`. No code changes are required.
+## 📂 Project Structure
 
-```json
-[
-    {
-        "id": "FINRA-2111",
-        "name": "Suitability",
-        "url": "[https://www.finra.org/rules-guidance/rulebooks/finra-rules/2111](https://www.finra.org/rules-guidance/rulebooks/finra-rules/2111)"
-    }
-]
+text
+├── dashboard.py          # Main application entry point & UI logic
+├── data/
+│   ├── tracked_rules.json # Configuration file for URLs to watch
+│   └── regulations.db     # SQLite database (auto-generated)
+├── src/
+│   ├── downloader.py      # Scraper logic with User-Agent rotation
+│   └── database_manager.py# SQL queries and version control logic
+├── requirements.txt      # Python dependencies
+└── README.md             # Documentation
+
