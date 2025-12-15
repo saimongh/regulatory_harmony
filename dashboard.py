@@ -59,13 +59,12 @@ def generate_dark_glass_diff(old_text, new_text):
     html = d.make_file(
         old_text.splitlines(),
         new_text.splitlines(),
-        fromdesc="Baseline",
-        todesc="Selected Version",
+        fromdesc="Baseline (Old)",
+        todesc="Comparison (New)",
         context=True,
         numlines=3
     )
     
-    # CSS: Dark Mode + Hide Ugly Default Legend
     custom_css = """
     <style>
         body { font-family: 'Helvetica Neue', sans-serif; font-size: 13px; color: #ccc; background-color: transparent; }
@@ -84,24 +83,18 @@ def generate_dark_glass_diff(old_text, new_text):
     </style>
     """
     
-    # Custom Clean Legend
+    # COMPACT LEGEND (Placed inside the HTML to move with content)
     legend_html = """
-    <div style="margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 8px; display: flex; gap: 20px; font-family: sans-serif; font-size: 12px; color: #aaa; border: 1px solid #333;">
-        <div style="display: flex; align-items: center;">
-            <span style="width: 12px; height: 12px; background-color: #0f3d1b; display: inline-block; margin-right: 8px; border: 1px solid #84e897;"></span> Added
-        </div>
-        <div style="display: flex; align-items: center;">
-            <span style="width: 12px; height: 12px; background-color: #3d1414; display: inline-block; margin-right: 8px; border: 1px solid #f28b8b;"></span> Deleted
-        </div>
-        <div style="display: flex; align-items: center;">
-            <span style="width: 12px; height: 12px; background-color: #3d3514; display: inline-block; margin-right: 8px; border: 1px solid #e8d984;"></span> Changed
-        </div>
+    <div style="margin-top: 10px; padding: 8px; background: rgba(0,0,0,0.3); border-radius: 6px; display: flex; gap: 15px; font-family: sans-serif; font-size: 11px; color: #aaa; border: 1px solid #444; width: fit-content;">
+        <span style="display:flex; align-items:center;"><span style="width:10px; height:10px; background:#0f3d1b; margin-right:5px; border:1px solid #84e897;"></span> Added Content</span>
+        <span style="display:flex; align-items:center;"><span style="width:10px; height:10px; background:#3d1414; margin-right:5px; border:1px solid #f28b8b;"></span> Deleted Content</span>
+        <span style="display:flex; align-items:center;"><span style="width:10px; height:10px; background:#3d3514; margin-right:5px; border:1px solid #e8d984;"></span> Modifications</span>
     </div>
     """
 
     return html.replace('<head>', f'<head>{custom_css}') + legend_html
 
-# --- THE GUARANTEED FIX: Hardcoded Demo Data ---
+# --- THE FIX: Hardcoded Demo Data with Flush ---
 def inject_demo_data(rule_id):
     fake_old_text = """(a) Standards of Commercial Honor and Principles of Trade
 A member, in the conduct of its business, shall observe high standards of commercial honor and just and equitable principles of trade.
@@ -116,13 +109,18 @@ A member, in the conduct of its business, shall observe high standards of commer
 No member shall effect any transaction in, or induce the purchase or sale of, any security by means of any manipulative, deceptive or other fraudulent device or contrivance.
 
 (c) New Requirement (Demo Update)
-This section simulates a new regulatory requirement added by the SEC to demonstrate the redline capabilities."""
+This section simulates a new regulatory requirement added by the SEC to demonstrate the redline capabilities. Because this text is present here but missing in the baseline, it will appear GREEN."""
     
     conn = sqlite3.connect('data/regulations.db')
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS rule_versions (id INTEGER PRIMARY KEY AUTOINCREMENT, rule_id TEXT, check_date TEXT, rule_text TEXT, change_summary TEXT)''')
+    
+    # CRITICAL: Delete ALL old versions for this rule to prevent confusion
     c.execute("DELETE FROM rule_versions WHERE rule_id = ?", (rule_id,))
+    
+    # Insert Baseline (v1)
     c.execute("INSERT INTO rule_versions (rule_id, check_date, rule_text, change_summary) VALUES (?, datetime('now', '-1 day'), ?, ?)", (rule_id, fake_old_text, "Historical Baseline (Demo)"))
+    # Insert New (v2)
     c.execute("INSERT INTO rule_versions (rule_id, check_date, rule_text, change_summary) VALUES (?, datetime('now'), ?, ?)", (rule_id, fake_new_text, "Live Audit (Demo)"))
     conn.commit()
     conn.close()
@@ -157,7 +155,7 @@ st.sidebar.markdown("---")
 st.sidebar.markdown("##### 🛠️ Demo Tools")
 if st.sidebar.button("⚠️ Load Test Data (Reset)"):
     inject_demo_data(selected_rule['id'])
-    st.sidebar.success("System Reset: Demo Data Loaded.")
+    st.sidebar.success("System Reset: Clean Demo Data Loaded.")
     st.rerun()
 
 # --- MAIN DISPLAY ---
@@ -184,8 +182,12 @@ with tab2:
         version_options = history_df.apply(lambda x: f"v.{x['id']} — {pd.to_datetime(x['check_date']).strftime('%b %d %H:%M')}", axis=1).tolist()
         version_map = {f"v.{row['id']} — {pd.to_datetime(row['check_date']).strftime('%b %d %H:%M')}": row['id'] for _, row in history_df.iterrows()}
         
-        with col_a: ver_a_label = st.selectbox("Baseline Version", version_options, index=1 if len(version_options) > 1 else 0)
-        with col_b: ver_b_label = st.selectbox("Comparison Version", version_options, index=0)
+        # SMART DEFAULTS: Attempt to set Left=Oldest (Index -1), Right=Newest (Index 0)
+        default_a = len(version_options) - 1 
+        default_b = 0
+        
+        with col_a: ver_a_label = st.selectbox("Baseline Version (Past)", version_options, index=default_a)
+        with col_b: ver_b_label = st.selectbox("Comparison Version (Present)", version_options, index=default_b)
             
         id_a = version_map[ver_a_label]
         id_b = version_map[ver_b_label]
@@ -196,19 +198,18 @@ with tab2:
             st.info("Versions are identical.")
         else:
             # --- SMART RESIZING LOGIC ---
-            # Calculate height based on number of lines + buffer for legend
+            # 1. Estimate line count (approximate)
             line_count = max(len(text_a.splitlines()), len(text_b.splitlines()))
-            # Formula: 25px per line + 150px buffer. Clamp between 300px and 800px.
-            dynamic_height = min(max(300, line_count * 25 + 200), 800)
+            # 2. Calculate pixels: 22px per line + 150px padding for header/legend
+            dynamic_height = (line_count * 22) + 150
+            # 3. Clamp: Minimum 300px, Maximum 800px (so it still scrolls if huge)
+            final_height = min(max(300, int(dynamic_height)), 800)
             
-            components.html(generate_dark_glass_diff(text_a, text_b), height=dynamic_height, scrolling=True)
+            components.html(generate_dark_glass_diff(text_a, text_b), height=final_height, scrolling=True)
 
 with tab3:
     st.markdown("##### Current Legal Text")
     try: selected_text_view = get_specific_version_text(version_map[ver_b_label])
     except: selected_text_view = get_specific_version_text(history_df.iloc[0]['id'])
     
-    if len(selected_text_view) == 0:
-        st.error("Empty data found.")
-    else:
-        st.code(selected_text_view, language="text")
+    st.code(selected_text_view, language="text")
