@@ -58,64 +58,111 @@ def get_specific_version_text(version_id):
     conn.close()
     return result[0] if result else ""
 
-def generate_dark_glass_diff(old_text, new_text):
-    d = difflib.HtmlDiff()
-    
-    # FIX: Ensure we are comparing clean lists of lines
-    old_lines = [line.strip() for line in old_text.splitlines() if line.strip()]
-    new_lines = [line.strip() for line in new_text.splitlines() if line.strip()]
-
-    html = d.make_file(
-        old_lines,
-        new_lines,
-        fromdesc="Baseline (Left)",
-        todesc="Comparison (Right)",
-        context=True,
-        numlines=3
-    )
-    
-    custom_css = """
-    <style>
-        body { font-family: 'Helvetica Neue', sans-serif; font-size: 13px; color: #ccc; background-color: transparent; }
-        table.diff { width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid #333; border-radius: 8px; }
-        .diff_header { background-color: #1a1a1a; color: #888; border: none; }
-        td { padding: 8px; border-bottom: 1px solid #222; }
-        
-        /* High-Contrast Colors */
-        .diff_add { background-color: #0f3d1b; color: #84e897; } 
-        .diff_sub { background-color: #3d1414; color: #f28b8b; } 
-        .diff_chg { background-color: #3d3514; color: #e8d984; }
-        
-        /* Hide Default Junk */
-        a[href^="#"] { display: none !important; }
-        table[summary="Legends"] { display: none !important; }
-    </style>
+# --- CUSTOM DIFF ENGINE (The Fix) ---
+def render_diff_html(old_text, new_text):
     """
-    return html.replace('<head>', f'<head>{custom_css}')
-
-# --- DEMO DATA INJECTOR ---
-def inject_demo_data(rule_id):
-    # Standard Paragraphs
-    p1 = "(a) Standards of Commercial Honor and Principles of Trade\nA member, in the conduct of its business, shall observe high standards of commercial honor and just and equitable principles of trade."
-    p2 = "(b) Prohibition Against Deceptive Practices\nNo member shall effect any transaction in, or induce the purchase or sale of, any security by means of any manipulative, deceptive or other fraudulent device or contrivance."
-    p3 = "(c) New Requirement (Demo Update)\nThis section simulates a new regulatory requirement added by the SEC to demonstrate the redline capabilities. Because this text is NOT in the baseline, it will appear GREEN."
-
-    # Baseline = P1 + P2
-    # Live Audit = P1 + P2 + P3
+    Manually builds a clean HTML table for side-by-side comparison.
+    100% control over colors (Green/Red) and layout.
+    """
+    a = old_text.splitlines()
+    b = new_text.splitlines()
     
+    # Use SequenceMatcher to find the differences
+    matcher = difflib.SequenceMatcher(None, a, b)
+    
+    html = []
+    html.append("""
+    <style>
+        .diff-table { width: 100%; border-collapse: collapse; font-family: 'Helvetica Neue', sans-serif; font-size: 13px; color: #ddd; }
+        .diff-row { display: flex; border-bottom: 1px solid #333; }
+        .diff-cell { flex: 1; padding: 5px 10px; word-wrap: break-word; white-space: pre-wrap; }
+        .diff-num { width: 30px; color: #666; text-align: right; padding-right: 10px; border-right: 1px solid #333; user-select: none; }
+        
+        /* THE COLORS */
+        .added { background-color: rgba(15, 61, 27, 0.6); color: #84e897; }   /* Green */
+        .deleted { background-color: rgba(61, 20, 20, 0.6); color: #f28b8b; } /* Red */
+        .empty { background-color: transparent; }
+    </style>
+    <div style="background: rgba(0,0,0,0.2); border-radius: 8px; border: 1px solid #444; overflow: hidden;">
+    """)
+    
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        # EQUAL: Print side by side (White)
+        if tag == 'equal':
+            for i, line in enumerate(a[i1:i2]):
+                html.append(f"""
+                <div class="diff-row">
+                    <div class="diff-num">{i1+i+1}</div><div class="diff-cell">{line}</div>
+                    <div class="diff-num">{j1+i+1}</div><div class="diff-cell">{line}</div>
+                </div>""")
+        
+        # REPLACE: Print Old (Red) on Left, New (Green) on Right
+        elif tag == 'replace':
+            old_chunk = a[i1:i2]
+            new_chunk = b[j1:j2]
+            # Pad the shorter list with empty strings so they align
+            max_len = max(len(old_chunk), len(new_chunk))
+            old_chunk += [''] * (max_len - len(old_chunk))
+            new_chunk += [''] * (max_len - len(new_chunk))
+            
+            for i in range(max_len):
+                o_text = old_chunk[i]
+                n_text = new_chunk[i]
+                o_cls = "deleted" if o_text else "empty"
+                n_cls = "added" if n_text else "empty"
+                html.append(f"""
+                <div class="diff-row">
+                    <div class="diff-num">{i1+i+1 if o_text else ''}</div><div class="diff-cell {o_cls}">{o_text}</div>
+                    <div class="diff-num">{j1+i+1 if n_text else ''}</div><div class="diff-cell {n_cls}">{n_text}</div>
+                </div>""")
+
+        # DELETE: Print Old (Red) on Left, Empty on Right
+        elif tag == 'delete':
+            for i, line in enumerate(a[i1:i2]):
+                html.append(f"""
+                <div class="diff-row">
+                    <div class="diff-num">{i1+i+1}</div><div class="diff-cell deleted">{line}</div>
+                    <div class="diff-num"></div><div class="diff-cell empty"></div>
+                </div>""")
+
+        # INSERT: Print Empty on Left, New (Green) on Right
+        elif tag == 'insert':
+            for i, line in enumerate(b[j1:j2]):
+                html.append(f"""
+                <div class="diff-row">
+                    <div class="diff-num"></div><div class="diff-cell empty"></div>
+                    <div class="diff-num">{j1+i+1}</div><div class="diff-cell added">{line}</div>
+                </div>""")
+                
+    html.append("</div>")
+    return "".join(html)
+
+# --- INJECT DATA ---
+def inject_demo_data(rule_id):
+    # Distinct lines help the diff engine work better
+    common = """(a) Standards of Commercial Honor and Principles of Trade
+A member, in the conduct of its business, shall observe high standards of commercial honor and just and equitable principles of trade.
+
+(b) Prohibition Against Deceptive Practices
+No member shall effect any transaction in, or induce the purchase or sale of, any security by means of any manipulative, deceptive or other fraudulent device or contrivance."""
+
+    added = """
+(c) New Requirement (Demo Update)
+This section simulates a new regulatory requirement added by the SEC to demonstrate the redline capabilities. Because this text is NOT in the baseline, it will appear GREEN."""
+
     conn = sqlite3.connect('data/regulations.db')
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS rule_versions (id INTEGER PRIMARY KEY AUTOINCREMENT, rule_id TEXT, check_date TEXT, rule_text TEXT, change_summary TEXT)''')
     
     c.execute("DELETE FROM rule_versions WHERE rule_id = ?", (rule_id,))
     
-    # Insert Baseline
+    # Baseline (v1)
     c.execute("INSERT INTO rule_versions (rule_id, check_date, rule_text, change_summary) VALUES (?, datetime('now', '-1 day'), ?, ?)", 
-              (rule_id, f"{p1}\n\n{p2}", "Historical Baseline (Demo)"))
+              (rule_id, common, "Historical Baseline (Demo)"))
 
-    # Insert Live Audit (With P3 Added)
+    # Live Audit (v2) - Note explicit newlines
     c.execute("INSERT INTO rule_versions (rule_id, check_date, rule_text, change_summary) VALUES (?, datetime('now'), ?, ?)", 
-              (rule_id, f"{p1}\n\n{p2}\n\n{p3}", "Live Audit (Demo)"))
+              (rule_id, common + "\n" + added, "Live Audit (Demo)"))
     
     conn.commit()
     conn.close()
@@ -177,7 +224,7 @@ with tab2:
         version_options = history_df.apply(lambda x: f"v.{x['id']} — {pd.to_datetime(x['check_date']).strftime('%b %d %H:%M')}", axis=1).tolist()
         version_map = {f"v.{row['id']} — {pd.to_datetime(row['check_date']).strftime('%b %d %H:%M')}": row['id'] for _, row in history_df.iterrows()}
         
-        # Default: Left=Oldest, Right=Newest
+        # Default: Left=Oldest (Bottom list item), Right=Newest (Top list item)
         with col_a: ver_a_label = st.selectbox("Baseline Version", version_options, index=len(version_options)-1)
         with col_b: ver_b_label = st.selectbox("Comparison Version", version_options, index=0)
             
@@ -186,21 +233,25 @@ with tab2:
         text_a = get_specific_version_text(id_a)
         text_b = get_specific_version_text(id_b)
         
-        # THE LEGEND (Moved Here per your request)
+        # THE LEGEND
         st.markdown("""
         <div style="margin-bottom: 10px; padding: 8px; background: rgba(0,0,0,0.3); border-radius: 6px; display: flex; gap: 15px; font-family: sans-serif; font-size: 11px; color: #aaa; border: 1px solid #444; width: fit-content;">
             <span style="display:flex; align-items:center;"><span style="width:10px; height:10px; background:#0f3d1b; margin-right:5px; border:1px solid #84e897;"></span> Added</span>
             <span style="display:flex; align-items:center;"><span style="width:10px; height:10px; background:#3d1414; margin-right:5px; border:1px solid #f28b8b;"></span> Deleted</span>
-            <span style="display:flex; align-items:center;"><span style="width:10px; height:10px; background:#3d3514; margin-right:5px; border:1px solid #e8d984;"></span> Changed</span>
         </div>
         """, unsafe_allow_html=True)
 
         if text_a == text_b:
             st.info("Versions are identical.")
         else:
+            # Generate Custom HTML
+            diff_html = render_diff_html(text_a, text_b)
+            
+            # Dynamic Height Logic
             line_count = max(len(text_a.splitlines()), len(text_b.splitlines()))
             dynamic_height = min(max(300, line_count * 25 + 50), 800)
-            components.html(generate_dark_glass_diff(text_a, text_b), height=dynamic_height, scrolling=True)
+            
+            components.html(diff_html, height=dynamic_height, scrolling=True)
 
 with tab3:
     st.markdown("##### Current Legal Text")
