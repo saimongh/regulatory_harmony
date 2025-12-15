@@ -290,4 +290,9 @@ with tab2:
 with tab3:
     st.markdown("##### Current Legal Text")
     latest_text = get_specific_version_text(history_df.iloc[0]['id'])
-    st.text_area("Content", latest_text, height=600, label_visibility="collapsed")
+    
+    # DEBUG: If this prints "0", your database is truly empty.
+    st.caption(f"Character Count: {len(latest_text)}") 
+    
+    # The Fix: Use st.code instead of st.text_area
+    st.code(latest_text, language="text")
