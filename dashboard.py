@@ -5,9 +5,30 @@ import sqlite3
 import pandas as pd
 import json
 import difflib
+import spacy
+import spacy.cli
+import os
 import streamlit.components.v1 as components
 from src.downloader import download_rule
 from src.database_manager import get_latest_version, log_new_version
+
+# --- 🛠️ RUNTIME FIX: Download NLP Model if missing ---
+@st.cache_resource
+def ensure_model_installed():
+    """
+    Checks if the spaCy model exists. If not, downloads it at runtime.
+    This prevents the 'Oven' hang during the build process.
+    """
+    model_name = "en_core_web_sm"
+    try:
+        spacy.load(model_name)
+    except OSError:
+        print(f"Model {model_name} not found. Downloading...")
+        spacy.cli.download(model_name)
+    return True
+
+# Trigger the check immediately
+ensure_model_installed()
 
 # --- Configuration ---
 st.set_page_config(page_title="Regulatory Harmony", layout="wide", page_icon="🌑")
@@ -32,7 +53,7 @@ st.markdown("""
         padding: 15px !important;
     }
 
-    /* Metric Values - Make them pop against dark */
+    /* Metric Values */
     div[data-testid="stMetricValue"] {
         color: #e0e0e0 !important;
     }
@@ -59,7 +80,7 @@ st.markdown("""
         font-weight: 300;
     }
 
-    /* 5. INTERACTION: Ghost Buttons (White outline) */
+    /* 5. INTERACTION: Ghost Buttons */
     .stButton>button {
         width: 100%;
         border-radius: 50px;
@@ -74,7 +95,7 @@ st.markdown("""
         box-shadow: 0 0 15px rgba(255,255,255,0.1);
     }
 
-    /* 6. TABS: Sleek indicators */
+    /* 6. TABS */
     .stTabs [data-baseweb="tab"] {
         color: #888;
     }
@@ -86,7 +107,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- Helper Functions (Same logic, new colors in diff) ---
+# --- Helper Functions ---
 def get_rules():
     try:
         with open('data/tracked_rules.json', 'r') as f:
@@ -95,13 +116,21 @@ def get_rules():
         return []
 
 def get_history(rule_id):
+    # Ensure DB exists (for cloud deployments)
+    if not os.path.exists('data/regulations.db'):
+        return pd.DataFrame()
+        
     conn = sqlite3.connect('data/regulations.db')
-    df = pd.read_sql_query(
-        "SELECT id, check_date, length(rule_text) as text_length, change_summary FROM rule_versions WHERE rule_id = ? ORDER BY check_date DESC",
-        conn,
-        params=(rule_id,)
-    )
-    conn.close()
+    try:
+        df = pd.read_sql_query(
+            "SELECT id, check_date, length(rule_text) as text_length, change_summary FROM rule_versions WHERE rule_id = ? ORDER BY check_date DESC",
+            conn,
+            params=(rule_id,)
+        )
+    except Exception:
+        df = pd.DataFrame()
+    finally:
+        conn.close()
     return df
 
 def get_specific_version_text(version_id):
@@ -129,11 +158,9 @@ def generate_dark_glass_diff(old_text, new_text):
         table.diff { width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid #333; border-radius: 8px; }
         .diff_header { background-color: #1a1a1a; color: #888; border: none; }
         td { padding: 8px; border-bottom: 1px solid #222; }
-        
-        /* Dark Mode Highlighters */
-        .diff_add { background-color: #0f3d1b; color: #84e897; } /* Deep Green BG, Bright Green Text */
-        .diff_sub { background-color: #3d1414; color: #f28b8b; } /* Deep Red BG, Bright Red Text */
-        .diff_chg { background-color: #3d3514; color: #e8d984; } /* Deep Yellow BG */
+        .diff_add { background-color: #0f3d1b; color: #84e897; } 
+        .diff_sub { background-color: #3d1414; color: #f28b8b; } 
+        .diff_chg { background-color: #3d3514; color: #e8d984; } 
     </style>
     """
     return html.replace('<head>', f'<head>{custom_css}')
@@ -141,6 +168,11 @@ def generate_dark_glass_diff(old_text, new_text):
 # --- Sidebar ---
 st.sidebar.markdown("### ⚖️ Regulatory Harmony")
 rules = get_rules()
+
+if not rules:
+    st.error("No rules loaded. Check data/tracked_rules.json")
+    st.stop()
+
 rule_options = {r['name']: r for r in rules}
 selected_rule_name = st.sidebar.selectbox("Select Rulebook", list(rule_options.keys()))
 selected_rule = rule_options[selected_rule_name]
@@ -174,7 +206,7 @@ st.markdown("Regulatory Compliance Monitor")
 history_df = get_history(selected_rule['id'])
 
 if history_df.empty:
-    st.info("No data available. Please initialize the rule via the sidebar.")
+    st.info("No data available. Click 'Run Live Audit' in the sidebar to initialize this rule.")
     st.stop()
 
 # Tabs
