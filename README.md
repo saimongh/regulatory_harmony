@@ -36,23 +36,26 @@ In the high-velocity world of financial regulation, keeping up with rule changes
 
 Clone the repository and move into the directory.
 
-``bash
+```bash
 git clone https://github.com/yourusername/sec-rule-tracker.git
 cd sec-rule-tracker
+```
 
 ### 2. Install Dependencies
 
 Install the required Python packages.
 
-``bash
+```bash
 pip install -r requirements.txt
+```
 
 ### 3. Run the Dashboard
 
 Launch the Streamlit application.
 
-``bash
+```bash
 streamlit run dashboard.py
+```
 
 ## 🎮 How to Use (Demo Flow)
 
@@ -75,4 +78,4 @@ streamlit run dashboard.py
 │   └── database_manager.py# SQL queries and version control logic
 ├── requirements.txt      # Python dependencies
 └── README.md             # Documentation
-
+```
